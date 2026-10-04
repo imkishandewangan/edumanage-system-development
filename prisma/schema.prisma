@@ -1,0 +1,84 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Institution {
+  id String @id @default(uuid())
+  name String
+  type String @default("COACHING")
+  currency String @default("INR")
+  createdAt DateTime @default(now())
+  users User[]
+  enquiries Enquiry[]
+  students Student[]
+  payments Payment[]
+}
+model Role {
+  id String @id @default(uuid())
+  name String
+  uniqueKey String @unique
+  permissions RolePermission[]
+  users User[]
+}
+model RolePermission {
+  id String @id @default(uuid())
+  roleId String
+  permissionKey String
+  role Role @relation(fields: [roleId], references: [id])
+  @@unique([roleId, permissionKey])
+}
+model User {
+  id String @id @default(uuid())
+  institutionId String
+  roleId String
+  name String
+  email String @unique
+  passwordHash String
+  status String @default("ACTIVE")
+  mustChangePassword Boolean @default(true)
+  institution Institution @relation(fields: [institutionId], references: [id])
+  role Role @relation(fields: [roleId], references: [id])
+}
+model Enquiry {
+  id String @id @default(uuid())
+  institutionId String
+  enquiryNo String @unique
+  name String
+  phone String
+  courseInterest String?
+  source String?
+  status String @default("NEW")
+  remarks String?
+  createdAt DateTime @default(now())
+  institution Institution @relation(fields: [institutionId], references: [id])
+}
+model Student {
+  id String @id @default(uuid())
+  institutionId String
+  admissionNo String @unique
+  firstName String
+  lastName String?
+  phone String?
+  email String?
+  status String @default("ACTIVE")
+  createdAt DateTime @default(now())
+  institution Institution @relation(fields: [institutionId], references: [id])
+  payments Payment[]
+}
+model Payment {
+  id String @id @default(uuid())
+  institutionId String
+  studentId String
+  amount Int
+  mode String
+  paidAt DateTime @default(now())
+  idempotencyKey String @unique
+  status String @default("RECEIVED")
+  institution Institution @relation(fields: [institutionId], references: [id])
+  student Student @relation(fields: [studentId], references: [id])
+}
