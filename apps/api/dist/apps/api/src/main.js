@@ -18,32 +18,50 @@ Object.defineProperty(exports, "__esModule", { value: true });
 require("reflect-metadata");
 const common_1 = require("@nestjs/common");
 const core_1 = require("@nestjs/core");
+const swagger_1 = require("@nestjs/swagger");
 const client_1 = require("@prisma/client");
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const helmet_1 = __importDefault(require("helmet"));
+const nestjs_pino_1 = require("nestjs-pino");
 const shared_1 = require("@edumanage/shared");
-let Db = class Db extends client_1.PrismaClient {
+const config_1 = require("./config");
+const http_1 = require("./http");
+let PrismaService = class PrismaService extends client_1.PrismaClient {
+    async onModuleDestroy() { await this.$disconnect(); }
 };
-Db = __decorate([
+PrismaService = __decorate([
     (0, common_1.Injectable)()
-], Db);
+], PrismaService);
 let AppController = class AppController {
-    db;
-    constructor(db) {
-        this.db = db;
+    db = new PrismaService();
+    async health() {
+        await this.db.$queryRaw `SELECT 1`;
+        return { status: 'ok', db: 'up' };
     }
-    health() { return { ok: true, service: 'edumanage-api' }; }
-    async login(body) { const input = shared_1.LoginSchema.parse(body); const user = await this.db.user.findUnique({ where: { email: input.email }, include: { role: true } }); if (!user || !(await bcryptjs_1.default.compare(input.password, user.passwordHash)))
-        return { ok: false, message: 'Invalid credentials' }; return { ok: true, accessToken: jsonwebtoken_1.default.sign({ sub: user.id, role: user.role.uniqueKey }, process.env.JWT_ACCESS_SECRET || 'dev-secret'), user: { id: user.id, name: user.name, email: user.email, role: user.role.uniqueKey } }; }
-    async stats() { const [students, enquiries, payments] = await Promise.all([this.db.student.count({ where: { status: 'ACTIVE' } }), this.db.enquiry.count(), this.db.payment.aggregate({ _sum: { amount: true } })]); return { students, enquiries, collectedPaise: payments._sum.amount || 0, attendanceRate: 92 }; }
+    async login(body) {
+        const input = shared_1.LoginSchema.parse(body);
+        const user = await this.db.user.findUnique({ where: { email: input.email }, include: { role: true } });
+        if (!user || !(await bcryptjs_1.default.compare(input.password, user.passwordHash)))
+            return { ok: false, message: 'Invalid credentials' };
+        return { ok: true, accessToken: jsonwebtoken_1.default.sign({ sub: user.id, role: user.role.uniqueKey }, config_1.env.JWT_ACCESS_SECRET), user: { id: user.id, name: user.name, email: user.email, role: user.role.uniqueKey } };
+    }
+    async stats() {
+        const [students, enquiries, payments] = await Promise.all([this.db.student.count({ where: { status: 'ACTIVE' } }), this.db.enquiry.count(), this.db.payment.aggregate({ _sum: { amount: true } })]);
+        return { students, enquiries, collectedPaise: payments._sum.amount || 0, attendanceRate: 92 };
+    }
     enquiries() { return this.db.enquiry.findMany({ orderBy: { createdAt: 'desc' } }); }
-    async create(body) { const input = shared_1.EnquirySchema.parse(body); return this.db.enquiry.create({ data: { ...input, enquiryNo: `ENQ-${Date.now()}`, institutionId: (await this.db.institution.findFirstOrThrow()).id } }); }
+    async create(body) {
+        const input = shared_1.EnquirySchema.parse(body);
+        const institution = await this.db.institution.findFirstOrThrow();
+        return this.db.enquiry.create({ data: { ...input, enquiryNo: `ENQ-${Date.now()}`, institutionId: institution.id } });
+    }
 };
 __decorate([
     (0, common_1.Get)('health'),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
-    __metadata("design:returntype", void 0)
+    __metadata("design:returntype", Promise)
 ], AppController.prototype, "health", null);
 __decorate([
     (0, common_1.Post)('auth/login'),
@@ -72,13 +90,23 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], AppController.prototype, "create", null);
 AppController = __decorate([
-    (0, common_1.Controller)(),
-    __metadata("design:paramtypes", [Db])
+    (0, common_1.Controller)()
 ], AppController);
 let AppModule = class AppModule {
 };
 AppModule = __decorate([
-    (0, common_1.Module)({ controllers: [AppController], providers: [Db] })
+    (0, common_1.Module)({ imports: [nestjs_pino_1.LoggerModule.forRoot({ pinoHttp: { level: config_1.env.NODE_ENV === 'production' ? 'info' : 'debug' } })], controllers: [AppController], providers: [PrismaService] })
 ], AppModule);
-async function bootstrap() { const app = await core_1.NestFactory.create(AppModule); app.enableCors(); await app.listen(process.env.PORT || 4000); }
+async function bootstrap() {
+    const app = await core_1.NestFactory.create(AppModule, { bufferLogs: true });
+    app.useLogger(app.get(nestjs_pino_1.Logger));
+    app.use((0, helmet_1.default)());
+    app.setGlobalPrefix('api/v1');
+    app.enableCors({ origin: 'http://localhost:5173', credentials: true });
+    app.useGlobalFilters(new http_1.GlobalExceptionFilter());
+    app.useGlobalInterceptors(new http_1.ResponseInterceptor());
+    const swaggerConfig = new swagger_1.DocumentBuilder().setTitle('EduManage API').setDescription('EduManage operations API').setVersion('1.0').build();
+    swagger_1.SwaggerModule.setup('docs', app, swagger_1.SwaggerModule.createDocument(app, swaggerConfig));
+    await app.listen(config_1.env.PORT);
+}
 bootstrap();
