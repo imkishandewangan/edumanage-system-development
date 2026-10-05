@@ -25,6 +25,7 @@ const shared_1 = require("@edumanage/shared");
 const config_1 = require("./config");
 const http_1 = require("./http");
 const auth_1 = require("./auth");
+const config_routes_1 = require("./config-routes");
 let AuthController = class AuthController {
     db = auth_1.prisma;
     async login(body) {
@@ -167,8 +168,8 @@ let AppModule = class AppModule {
 AppModule = __decorate([
     (0, common_1.Module)({
         imports: [nestjs_pino_1.LoggerModule.forRoot({ pinoHttp: { level: config_1.env.NODE_ENV === 'production' ? 'info' : 'debug' } })],
-        controllers: [AuthController, AppController],
-        providers: [auth_1.PrismaService, core_1.Reflector, auth_1.PermissionsGuard, auth_1.ModuleEnabledGuard, { provide: core_1.APP_GUARD, useClass: auth_1.JwtAuthGuard }, { provide: core_1.APP_GUARD, useClass: auth_1.PermissionsGuard }, { provide: core_1.APP_GUARD, useClass: auth_1.ModuleEnabledGuard }],
+        controllers: [AuthController, AppController, config_routes_1.ConfigController],
+        providers: [auth_1.PrismaService, config_routes_1.NumberingService, core_1.Reflector, auth_1.PermissionsGuard, auth_1.ModuleEnabledGuard, { provide: core_1.APP_GUARD, useClass: auth_1.JwtAuthGuard }, { provide: core_1.APP_GUARD, useClass: auth_1.PermissionsGuard }, { provide: core_1.APP_GUARD, useClass: auth_1.ModuleEnabledGuard }],
     })
 ], AppModule);
 async function bootstrap() {

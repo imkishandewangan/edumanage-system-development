@@ -8,6 +8,7 @@ import { EnquirySchema, LoginSchema } from '@edumanage/shared'
 import { env } from './config'
 import { GlobalExceptionFilter, ResponseInterceptor } from './http'
 import { AuthenticatedRequest, authenticatePassword, createRefreshToken, hashRefreshToken, PrismaService, prisma, Public, RequireModule, RequirePermission, JwtAuthGuard, PermissionsGuard, ModuleEnabledGuard, signAccessToken, signRefreshToken, verifyRefreshToken } from './auth'
+import { ConfigController, NumberingService } from './config-routes'
 
 @Controller()
 class AuthController {
@@ -91,8 +92,8 @@ class AppController {
 
 @Module({
   imports: [LoggerModule.forRoot({ pinoHttp: { level: env.NODE_ENV === 'production' ? 'info' : 'debug' } })],
-  controllers: [AuthController, AppController],
-  providers: [PrismaService, Reflector, PermissionsGuard, ModuleEnabledGuard, { provide: APP_GUARD, useClass: JwtAuthGuard }, { provide: APP_GUARD, useClass: PermissionsGuard }, { provide: APP_GUARD, useClass: ModuleEnabledGuard }],
+  controllers: [AuthController, AppController, ConfigController],
+  providers: [PrismaService, NumberingService, Reflector, PermissionsGuard, ModuleEnabledGuard, { provide: APP_GUARD, useClass: JwtAuthGuard }, { provide: APP_GUARD, useClass: PermissionsGuard }, { provide: APP_GUARD, useClass: ModuleEnabledGuard }],
 })
 class AppModule {}
 
