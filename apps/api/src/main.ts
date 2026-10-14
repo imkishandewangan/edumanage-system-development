@@ -88,6 +88,20 @@ class AppController {
     const input = EnquirySchema.parse(body)
     return this.db.enquiry.create({ data: { ...input, enquiryNo: `ENQ-${Date.now()}`, institutionId: req.user!.institutionId } })
   }
+  @Get('students')
+  @RequireModule('students')
+  students(@Req() req: AuthenticatedRequest) { return this.db.student.findMany({ where: { institutionId: req.user!.institutionId }, orderBy: { id: 'desc' } }) }
+  @Post('students')
+  @RequireModule('students')
+  @RequirePermission('student.create')
+  studentsCreate(@Body() body: { firstName: string; lastName?: string; phone?: string }, @Req() req: AuthenticatedRequest) { return this.db.student.create({ data: { institutionId: req.user!.institutionId, admissionNo: `ADM-${Date.now()}`, firstName: body.firstName, lastName: body.lastName, phone: body.phone } }) }
+  @Get('payments')
+  @RequireModule('fees')
+  payments(@Req() req: AuthenticatedRequest) { return this.db.payment.findMany({ where: { institutionId: req.user!.institutionId }, orderBy: { paidAt: 'desc' } }) }
+  @Post('payments')
+  @RequireModule('fees')
+  @RequirePermission('fees.payment.create')
+  paymentsCreate(@Body() body: { amount: number; mode: string; studentId?: string; note?: string }, @Req() req: AuthenticatedRequest) { return this.db.payment.create({ data: { institutionId: req.user!.institutionId, amount: Math.round(Number(body.amount) * 100), mode: body.mode, idempotencyKey: `web-${Date.now()}-${Math.random()}` } }) }
 }
 
 @Module({

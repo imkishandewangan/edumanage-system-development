@@ -129,6 +129,10 @@ let AppController = class AppController {
         const input = shared_1.EnquirySchema.parse(body);
         return this.db.enquiry.create({ data: { ...input, enquiryNo: `ENQ-${Date.now()}`, institutionId: req.user.institutionId } });
     }
+    students(req) { return this.db.student.findMany({ where: { institutionId: req.user.institutionId }, orderBy: { id: 'desc' } }); }
+    studentsCreate(body, req) { return this.db.student.create({ data: { institutionId: req.user.institutionId, admissionNo: `ADM-${Date.now()}`, firstName: body.firstName, lastName: body.lastName, phone: body.phone } }); }
+    payments(req) { return this.db.payment.findMany({ where: { institutionId: req.user.institutionId }, orderBy: { paidAt: 'desc' } }); }
+    paymentsCreate(body, req) { return this.db.payment.create({ data: { institutionId: req.user.institutionId, amount: Math.round(Number(body.amount) * 100), mode: body.mode, idempotencyKey: `web-${Date.now()}-${Math.random()}` } }); }
 };
 __decorate([
     (0, auth_1.Public)(),
@@ -160,6 +164,42 @@ __decorate([
     __metadata("design:paramtypes", [Object, Object]),
     __metadata("design:returntype", Promise)
 ], AppController.prototype, "create", null);
+__decorate([
+    (0, common_1.Get)('students'),
+    (0, auth_1.RequireModule)('students'),
+    __param(0, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], AppController.prototype, "students", null);
+__decorate([
+    (0, common_1.Post)('students'),
+    (0, auth_1.RequireModule)('students'),
+    (0, auth_1.RequirePermission)('student.create'),
+    __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", void 0)
+], AppController.prototype, "studentsCreate", null);
+__decorate([
+    (0, common_1.Get)('payments'),
+    (0, auth_1.RequireModule)('fees'),
+    __param(0, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], AppController.prototype, "payments", null);
+__decorate([
+    (0, common_1.Post)('payments'),
+    (0, auth_1.RequireModule)('fees'),
+    (0, auth_1.RequirePermission)('fees.payment.create'),
+    __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", void 0)
+], AppController.prototype, "paymentsCreate", null);
 AppController = __decorate([
     (0, common_1.Controller)()
 ], AppController);
