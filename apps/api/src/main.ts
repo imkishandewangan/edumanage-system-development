@@ -1,10 +1,11 @@
 import 'reflect-metadata'
-import { Body, Controller, Get, Headers, HttpCode, Injectable, Module, Post, Req, UseGuards } from '@nestjs/common'
+import { randomUUID } from 'node:crypto'
+import { Body, Controller, Get, HttpCode, Module, NotFoundException, Post, Req } from '@nestjs/common'
 import { APP_GUARD, NestFactory, Reflector } from '@nestjs/core'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import helmet from 'helmet'
 import { Logger, LoggerModule } from 'nestjs-pino'
-import { EnquirySchema, LoginSchema } from '@edumanage/shared'
+import { AttendanceSchema, CourseSchema, EnquirySchema, LoginSchema, PaymentSchema, StudentSchema } from '@edumanage/shared'
 import { env } from './config'
 import { GlobalExceptionFilter, ResponseInterceptor } from './http'
 import { AuthenticatedRequest, authenticatePassword, createRefreshToken, hashRefreshToken, PrismaService, prisma, Public, RequireModule, RequirePermission, JwtAuthGuard, PermissionsGuard, ModuleEnabledGuard, signAccessToken, signRefreshToken, verifyRefreshToken } from './auth'
@@ -73,20 +74,86 @@ class AppController {
   @Get('dashboard/stats')
   async stats(@Req() req: AuthenticatedRequest) {
     const institutionId = req.user!.institutionId
+    const startOfMonth = new Date()
+    startOfMonth.setDate(1)
+    startOfMonth.setHours(0, 0, 0, 0)
     const [students, enquiries, payments] = await Promise.all([
       this.db.student.count({ where: { status: 'ACTIVE', ...(institutionId ? { institutionId } : {}) } }),
       this.db.enquiry.count({ where: institutionId ? { institutionId } : undefined }),
-      this.db.payment.aggregate({ where: institutionId ? { institutionId } : undefined, _sum: { amount: true } }),
+      this.db.payment.aggregate({ where: { institutionId, paidAt: { gte: startOfMonth }, status: 'RECEIVED' }, _sum: { amount: true } }),
     ])
-    return { students, enquiries, collectedPaise: payments._sum.amount || 0, attendanceRate: 92 }
+    return { students, enquiries, collectedMinorUnits: payments._sum.amount || 0 }
   }
   @Get('enquiries')
-  async enquiries(@Req() req: AuthenticatedRequest) { return this.db.enquiry.findMany({ where: { institutionId: req.user!.institutionId }, orderBy: { id: 'desc' } }) }
+  @RequireModule('enquiry')
+  @RequirePermission('enquiry.read')
+  async enquiries(@Req() req: AuthenticatedRequest) { return this.db.enquiry.findMany({ where: { institutionId: req.user!.institutionId }, orderBy: { createdAt: 'desc' } }) }
   @Post('enquiries')
+  @RequireModule('enquiry')
   @RequirePermission('enquiry.create')
   async create(@Body() body: unknown, @Req() req: AuthenticatedRequest) {
     const input = EnquirySchema.parse(body)
-    return this.db.enquiry.create({ data: { ...input, enquiryNo: `ENQ-${Date.now()}`, institutionId: req.user!.institutionId } })
+    return this.db.enquiry.create({ data: { ...input, enquiryNo: `ENQ-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, institutionId: req.user!.institutionId } })
+  }
+
+  @Get('students')
+  @RequireModule('students')
+  @RequirePermission('student.read')
+  async students(@Req() req: AuthenticatedRequest) { return this.db.student.findMany({ where: { institutionId: req.user!.institutionId }, orderBy: { createdAt: 'desc' } }) }
+
+  @Post('students')
+  @RequireModule('students')
+  @RequirePermission('student.create')
+  async createStudent(@Body() body: unknown, @Req() req: AuthenticatedRequest) {
+    const input = StudentSchema.parse(body)
+    const institutionId = req.user!.institutionId
+    const admissionNo = `ADM-${Date.now()}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`
+    return this.db.student.create({ data: { ...input, admissionNo, institutionId } })
+  }
+
+  @Get('courses')
+  @RequireModule('academics')
+  @RequirePermission('academics.manage')
+  async courses(@Req() req: AuthenticatedRequest) { return this.db.course.findMany({ where: { institutionId: req.user!.institutionId }, orderBy: { createdAt: 'desc' } }) }
+
+  @Post('courses')
+  @RequireModule('academics')
+  @RequirePermission('academics.manage')
+  async createCourse(@Body() body: unknown, @Req() req: AuthenticatedRequest) {
+    const input = CourseSchema.parse(body)
+    return this.db.course.create({ data: { ...input, institutionId: req.user!.institutionId } })
+  }
+
+  @Get('payments')
+  @RequireModule('fees')
+  @RequirePermission('fees.payment.create')
+  async payments(@Req() req: AuthenticatedRequest) { return this.db.payment.findMany({ where: { institutionId: req.user!.institutionId }, include: { student: true }, orderBy: { paidAt: 'desc' } }) }
+
+  @Post('payments')
+  @RequireModule('fees')
+  @RequirePermission('fees.payment.create')
+  async createPayment(@Body() body: unknown, @Req() req: AuthenticatedRequest) {
+    const input = PaymentSchema.parse(body)
+    const institutionId = req.user!.institutionId
+    const student = await this.db.student.findFirst({ where: { id: input.studentId, institutionId } })
+    if (!student) throw new NotFoundException('Student record was not found in this institution')
+    return this.db.payment.create({ data: { institutionId, studentId: student.id, amount: input.amountMinorUnits, mode: input.mode, idempotencyKey: randomUUID() }, include: { student: true } })
+  }
+
+  @Get('attendance')
+  @RequireModule('attendance')
+  @RequirePermission('attendance.mark')
+  async attendance(@Req() req: AuthenticatedRequest) { return this.db.attendance.findMany({ where: { institutionId: req.user!.institutionId }, include: { student: true }, orderBy: [{ date: 'desc' }, { createdAt: 'desc' }] }) }
+
+  @Post('attendance')
+  @RequireModule('attendance')
+  @RequirePermission('attendance.mark')
+  async markAttendance(@Body() body: unknown, @Req() req: AuthenticatedRequest) {
+    const input = AttendanceSchema.parse(body)
+    const institutionId = req.user!.institutionId
+    const student = await this.db.student.findFirst({ where: { id: input.studentId, institutionId } })
+    if (!student) throw new NotFoundException('Student record was not found in this institution')
+    return this.db.attendance.upsert({ where: { studentId_date: { studentId: input.studentId, date: input.date } }, update: { status: input.status }, create: { ...input, institutionId } })
   }
 }
 

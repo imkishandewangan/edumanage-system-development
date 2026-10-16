@@ -1,11 +1,9 @@
-import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
   title: 'EduManage · Institution OS',
   description: 'A calm, configurable workspace for education institutions to manage admissions, students, fees, academics, and attendance.',
-  generator: 'v0.app',
   icons: {
     icon: [
       {
@@ -42,7 +40,6 @@ export default function RootLayout({
     <html lang="en">
       <body className="antialiased">
         {children}
-        {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>
   )

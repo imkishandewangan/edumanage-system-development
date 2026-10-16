@@ -32,6 +32,8 @@ model Institution {
   files           File[]
   enquiries       Enquiry[]
   students        Student[]
+  courses         Course[]
+  attendance      Attendance[]
   payments        Payment[]
   receipts        Receipt[]
 }
@@ -211,7 +213,10 @@ model Enquiry {
   enquiryNo     String
   name          String
   phone         String
+  course        String?
+  source        String?
   status        String      @default("NEW")
+  createdAt     DateTime    @default(now())
   institution   Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
 
   @@unique([institutionId, enquiryNo])
@@ -225,6 +230,9 @@ model Student {
   firstName     String
   lastName      String?
   phone         String?
+  createdAt     DateTime    @default(now())
+  payments      Payment[]
+  attendance    Attendance[]
   status        String      @default("ACTIVE")
   institution   Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
 
@@ -240,9 +248,38 @@ model Payment {
   paidAt         DateTime    @default(now())
   idempotencyKey String      @unique
   status         String      @default("RECEIVED")
+  studentId      String?
   institution    Institution @relation(fields: [institutionId], references: [id], onDelete: Restrict)
+  student        Student?    @relation(fields: [studentId], references: [id], onDelete: SetNull)
 
   @@index([paidAt])
+}
+
+model Course {
+  id            String      @id @default(uuid())
+  institutionId String
+  name          String
+  description   String?
+  isActive      Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+  institution   Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+
+  @@unique([institutionId, name])
+  @@index([institutionId, isActive])
+}
+
+model Attendance {
+  id            String      @id @default(uuid())
+  institutionId String
+  studentId     String
+  date          String
+  status        String      @default("PRESENT")
+  createdAt     DateTime    @default(now())
+  institution   Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  student       Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, date])
+  @@index([institutionId, date])
 }
 
 model Receipt {
