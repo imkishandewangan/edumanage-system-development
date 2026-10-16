@@ -1,0 +1,258 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Institution {
+  id              String           @id @default(uuid())
+  name            String
+  type            String           @default("COACHING")
+  logoFileId      String?
+  address         String?
+  phone           String?
+  email           String?
+  currency        String           @default("INR")
+  timezone        String           @default("Asia/Kolkata")
+  receiptHeader   String?
+  receiptFooter   String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  branches        Branch[]
+  roles           Role[]
+  users           User[]
+  moduleConfigs   ModuleConfig[]
+  masterItems     MasterItem[]
+  numberSequences NumberSequence[]
+  academicYears   AcademicYear[]
+  auditLogs       AuditLog[]
+  files           File[]
+  enquiries       Enquiry[]
+  students        Student[]
+  payments        Payment[]
+  receipts        Receipt[]
+}
+
+model Branch {
+  id            String      @id @default(uuid())
+  institutionId String
+  name          String
+  code          String
+  address       String?
+  phone         String?
+  isActive      Boolean     @default(true)
+  institution   Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  users         User[]
+
+  @@unique([institutionId, code])
+  @@index([institutionId])
+}
+
+model Role {
+  id            String           @id @default(uuid())
+  institutionId String
+  name          String
+  uniqueKey     String
+  description   String?
+  isSystem      Boolean          @default(false)
+  institution   Institution      @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  permissions   RolePermission[]
+  users         User[]
+
+  @@unique([institutionId, name])
+  @@unique([institutionId, uniqueKey])
+}
+
+model RolePermission {
+  roleId        String
+  permissionKey String
+  role          Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionKey])
+}
+
+model User {
+  id                  String                   @id @default(uuid())
+  institutionId       String
+  branchId            String?
+  roleId              String
+  name                String
+  email               String                   @unique
+  phone               String?
+  passwordHash        String
+  status              String                   @default("ACTIVE")
+  failedAttempts      Int                      @default(0)
+  lastLoginAt         DateTime?
+  mustChangePassword  Boolean                  @default(true)
+  institution         Institution              @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  branch              Branch?                  @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  role                Role                     @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  refreshTokens       RefreshToken[]
+  auditLogs           AuditLog[]
+  files               File[]
+  permissionOverrides UserPermissionOverride[]
+}
+
+model UserPermissionOverride {
+  userId        String
+  permissionKey String
+  effect        String
+  user          User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, permissionKey])
+}
+
+model RefreshToken {
+  id         String    @id @default(uuid())
+  userId     String
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  deviceInfo String?
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model ModuleConfig {
+  id            String      @id @default(uuid())
+  institutionId String
+  moduleKey     String
+  enabled       Boolean     @default(true)
+  settings      String      @default("{}")
+  institution   Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+
+  @@unique([institutionId, moduleKey])
+}
+
+model MasterItem {
+  id            String      @id @default(uuid())
+  institutionId String
+  type          String
+  code          String?
+  label         String
+  sortOrder     Int         @default(0)
+  isActive      Boolean     @default(true)
+  institution   Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+
+  @@unique([institutionId, type, code])
+  @@index([institutionId, type, isActive])
+}
+
+model NumberSequence {
+  id            String      @id @default(uuid())
+  institutionId String
+  key           String
+  pattern       String
+  currentValue  Int         @default(0)
+  resetPolicy   String      @default("NEVER")
+  periodYear    Int?
+  institution   Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+
+  @@unique([institutionId, key])
+}
+
+model AcademicYear {
+  id            String      @id @default(uuid())
+  institutionId String
+  label         String
+  startDate     DateTime
+  endDate       DateTime
+  isCurrent     Boolean     @default(false)
+  institution   Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+
+  @@unique([institutionId, label])
+  @@index([institutionId, isCurrent])
+}
+
+model AuditLog {
+  id            String      @id @default(uuid())
+  institutionId String
+  userId        String?
+  entity        String
+  entityId      String
+  action        String
+  before        String?
+  after         String?
+  ip            String?
+  userAgent     String?
+  createdAt     DateTime    @default(now())
+  institution   Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  user          User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entity, entityId])
+  @@index([institutionId, createdAt])
+}
+
+model File {
+  id            String      @id @default(uuid())
+  institutionId String
+  ownerType     String
+  ownerId       String
+  originalName  String
+  storedPath    String
+  mime          String
+  size          Int
+  checksum      String?
+  uploadedBy    String?
+  createdAt     DateTime    @default(now())
+  institution   Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  uploader      User?       @relation(fields: [uploadedBy], references: [id], onDelete: SetNull)
+
+  @@index([institutionId, ownerType, ownerId])
+}
+
+model Enquiry {
+  id            String      @id @default(uuid())
+  institutionId String
+  enquiryNo     String
+  name          String
+  phone         String
+  status        String      @default("NEW")
+  institution   Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+
+  @@unique([institutionId, enquiryNo])
+  @@index([institutionId, status])
+}
+
+model Student {
+  id            String      @id @default(uuid())
+  institutionId String
+  admissionNo   String
+  firstName     String
+  lastName      String?
+  phone         String?
+  status        String      @default("ACTIVE")
+  institution   Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+
+  @@unique([institutionId, admissionNo])
+  @@index([firstName, phone, status])
+}
+
+model Payment {
+  id             String      @id @default(uuid())
+  institutionId  String
+  amount         Int
+  mode           String
+  paidAt         DateTime    @default(now())
+  idempotencyKey String      @unique
+  status         String      @default("RECEIVED")
+  institution    Institution @relation(fields: [institutionId], references: [id], onDelete: Restrict)
+
+  @@index([paidAt])
+}
+
+model Receipt {
+  id            String      @id @default(uuid())
+  institutionId String
+  paymentId     String      @unique
+  receiptNo     String
+  status        String      @default("ACTIVE")
+  issuedAt      DateTime    @default(now())
+  institution   Institution @relation(fields: [institutionId], references: [id], onDelete: Restrict)
+
+  @@unique([institutionId, receiptNo])
+}
